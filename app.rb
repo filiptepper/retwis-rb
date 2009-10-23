@@ -1,4 +1,3 @@
-
 require 'rubygems'
 require 'sinatra'  
 require 'erb'
@@ -6,6 +5,8 @@ require 'rubyredis'
 
 require 'domain'
 require 'login-signup'
+
+require "digest/md5"
 
 set :sessions, true
 
