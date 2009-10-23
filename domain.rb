@@ -116,6 +116,19 @@ class User < Model
   def follow(user)
     return if user == self
     redis.set_add("user:id:#{id}:followees", user.id)
+    
+    # needs optimization
+    redis.list_range("user:id:#{user.id}:posts", 0, -1).each do |post_id|
+      redis.push_head "user:id:#{id}:timeline", post_id
+    end
+
+    timeline = redis.sort "user:id:#{id}:timeline", { :order => "ASC" }
+    redis.del "user:id:#{id}:timeline"
+    timeline.each do |post_id|
+      redis.push_head "user:id:#{id}:timeline", post_id
+    end
+    # /needs optimization
+    
     user.add_follower(self)
   end
   
