@@ -1,4 +1,3 @@
-
 class Timeline
   def self.page(page)
     from      = (page-1)*10
@@ -122,6 +121,11 @@ class User < Model
   
   def stop_following(user)
     redis.set_delete("user:id:#{id}:followees", user.id)
+
+    redis.list_range("user:id:#{id}:timeline", 0, -1).each do |post_id|
+      redis.list_rm "user:id:#{id}:timeline", 0, post_id if Post.find_by_id(post_id).user_id == user.id
+    end
+
     user.remove_follower(self)
   end
   
@@ -153,6 +157,12 @@ class User < Model
 end
   
 class Post < Model
+  def self.find_by_id(id)
+    if redis.key?("post:id:#{id}:content")
+      Post.new(id)
+    end
+  end
+  
   def self.create(user, content)
     post_id = redis.incr("post:uid")
     post = Post.new(post_id)
@@ -183,12 +193,3 @@ class Post < Model
     User.new(user_id)
   end
 end
-
-
-
-
-
-
-
-
-
