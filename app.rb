@@ -39,6 +39,7 @@ post '/post' do
     erb :index
   else
     Post.create(@logged_in_user, params[:content])
+    redis.bgsave
     redirect '/'
   end
 end
@@ -48,6 +49,7 @@ get '/:follower/follow/:followee' do |follower_username, followee_username|
   followee = User.find_by_username(followee_username)
   redirect '/' unless @logged_in_user == follower
   follower.follow(followee)
+  redis.bgsave
   redirect "/" + followee_username
 end
 
@@ -56,6 +58,7 @@ get '/:follower/stopfollow/:followee' do |follower_username, followee_username|
   followee = User.find_by_username(followee_username)
   redirect '/' unless @logged_in_user == follower
   follower.stop_following(followee)
+  redis.bgsave
   redirect "/" + followee_username
 end
 
