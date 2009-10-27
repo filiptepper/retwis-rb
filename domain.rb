@@ -80,15 +80,17 @@ class User < Model
   property :hashed_password
   
   def posts(page=1)
+    return [] unless redis.exists "user:id:#{id}:posts"
     from, to = (page-1)*10, page*10
-    redis.list_range("user:id:#{id}:posts", from, to).map do |post_id|
+    redis.sort("user:id:#{id}:posts", { :order => "DESC", :limit => [from, to]}).map do |post_id|
       Post.new(post_id)
     end
   end
   
   def timeline(page=1)
+    return [] unless redis.exists "user:id:#{id}:timeline"
     from, to = (page-1)*10, page*10
-    redis.list_range("user:id:#{id}:timeline", from, to).map do |post_id|
+    redis.sort("user:id:#{id}:timeline", { :order => "DESC", :limit => [from, to] } ).map do |post_id|
       Post.new(post_id)
     end
   end
@@ -101,12 +103,12 @@ class User < Model
   end
   
   def add_post(post)
-    redis.push_head("user:id:#{id}:posts", post.id)
-    redis.push_head("user:id:#{id}:timeline", post.id)
+    redis.set_add("user:id:#{id}:posts", post.id)
+    redis.set_add("user:id:#{id}:timeline", post.id)
   end
   
   def add_timeline_post(post)
-    redis.push_head("user:id:#{id}:timeline", post.id)
+    redis.set_add("user:id:#{id}:timeline", post.id)
   end
   
   def add_mention(post)
@@ -116,28 +118,17 @@ class User < Model
   def follow(user)
     return if user == self
     redis.set_add("user:id:#{id}:followees", user.id)
-    
-    # needs optimization
-    redis.list_range("user:id:#{user.id}:posts", 0, -1).each do |post_id|
-      redis.push_head "user:id:#{id}:timeline", post_id
-    end
-
-    timeline = redis.sort "user:id:#{id}:timeline", { :order => "ASC" }
-    redis.del "user:id:#{id}:timeline"
-    timeline.each do |post_id|
-      redis.push_head "user:id:#{id}:timeline", post_id
-    end
-    # /needs optimization
-    
+    redis.sunionstore "user:id:#{id}:timeline", "user:id:#{id}:timeline", "user:id:#{user.id}:posts"
     user.add_follower(self)
   end
   
   def stop_following(user)
     redis.set_delete("user:id:#{id}:followees", user.id)
+    redis.sdiffstore "user:id:#{id}:timeline", "user:id:#{id}:timeline", "user:id:#{user.id}:posts"
 
-    redis.list_range("user:id:#{id}:timeline", 0, -1).each do |post_id|
-      redis.list_rm "user:id:#{id}:timeline", 0, post_id if Post.find_by_id(post_id).user_id == user.id
-    end
+    # redis.list_range("user:id:#{id}:timeline", 0, -1).each do |post_id|
+    #   redis.list_rm "user:id:#{id}:timeline", 0, post_id if Post.find_by_id(post_id).user_id == user.id
+    # end
 
     user.remove_follower(self)
   end
